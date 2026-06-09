@@ -1,0 +1,8 @@
+{
+  "appId": "com.baby.diary",
+  "appName": "宝宝成长日记",
+  "webDir": "dist",
+  "server": {
+    "androidScheme": "https"
+  }
+}
