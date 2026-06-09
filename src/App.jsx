@@ -111,11 +111,27 @@ const MONTH_SCHEDULES = {
   }
 };
 
+const MOM_TIPS = {
+  0: ['多卧床休息，促进子宫恢复', '注意恶露颜色和量', '产后1周清淡饮食，逐渐增加营养', '保持会阴清洁，勤换卫生巾', '多喝水促进乳汁分泌', '宝宝睡你也睡，抓紧一切时间休息'],
+  1: ['开始做凯格尔运动，修复盆底肌', '可以开始轻度散步', '多喝汤水，保证奶量', '注意乳房护理，防皲防堵', '和伴侣沟通情绪变化', '每天给自己15分钟独处时间'],
+  2: ['可以逐渐恢复孕前饮食', '注意脱发是正常的产后现象', '开始产后恢复运动（遵医嘱）', '建立哺乳与泵奶规律', '关注情绪，产后抑郁可发生在任何时候'],
+  3: ['恢复性生活需医生确认', '运动强度可逐渐增加', '注意补钙补铁', '返岗前准备：泵奶计划、作息调整'],
+  4: ['宝宝加辅食后调整哺乳节奏', '注意自己的营养摄入', '可能恢复月经，正常现象'],
+  5: ['哺乳次数减少，关注乳房健康', '可以和宝宝一起做亲子瑜伽', '营养均衡，适度控制体重'],
+};
+
+const MOODS = ['😊', '😌', '😐', '😔', '😢', '😤', '🥰', '😴'];
+const MOOD_LABELS = { '😊': '开心', '😌': '平静', '😐': '一般', '😔': '低落', '😢': '难过', '😤': '烦躁', '🥰': '幸福', '😴': '疲惫' };
+
 const DEFAULT_DATA = {
   feeding: [],
   sleep: [],
   diaper: [],
   growth: [],
+  momMood: [],
+  momWater: [],
+  momPump: [],
+  momSupplement: [],
   babyName: '',
   birthDate: '',
   babyGender: 'boy',
@@ -212,13 +228,25 @@ export default function App() {
 
   const age = getBabyAge(data.birthDate);
   const monthIdx = age ? getMonthIndex(age.months) : 0;
+
   const todayRecords = {
     feeding: getDayRecords(data.feeding, selectedDate),
     sleep: getDayRecords(data.sleep, selectedDate),
     diaper: getDayRecords(data.diaper, selectedDate),
+    momMood: getDayRecords(data.momMood, selectedDate),
+    momWater: getDayRecords(data.momWater, selectedDate),
+    momPump: getDayRecords(data.momPump, selectedDate),
   };
 
-  const todayStats = {
+  const todayMomStats = {
+    mood: todayRecords.momMood.length > 0 ? todayRecords.momMood[todayRecords.momMood.length - 1].mood : null,
+    waterCount: todayRecords.momWater.length,
+    pumpCount: todayRecords.momPump.length,
+    pumpTotal: todayRecords.momPump.reduce((s, r) => s + (r.amount || 0), 0),
+    supplements: getDayRecords(data.momSupplement, selectedDate),
+  };
+
+  const todayBabyStats = {
     feedCount: todayRecords.feeding.length,
     totalFeed: todayRecords.feeding.reduce((s, r) => s + (r.amount || 0), 0),
     sleepTotal: todayRecords.sleep.reduce((s, r) => {
@@ -244,17 +272,30 @@ export default function App() {
 
       <nav className="tab-bar">
         <Tab label="📋 今日" active={tab === 'today'} onClick={() => { setTab('today'); setSelectedDate(today()); }} />
+        <Tab label="👩 妈妈" active={tab === 'mom'} onClick={() => setTab('mom')} />
         <Tab label="📅 日历" active={tab === 'calendar'} onClick={() => setTab('calendar')} />
         <Tab label="📊 生长" active={tab === 'growth'} onClick={() => setTab('growth')} />
-        <Tab label="📖 月龄指南" active={tab === 'guide'} onClick={() => setTab('guide')} />
+        <Tab label="📖 指南" active={tab === 'guide'} onClick={() => setTab('guide')} />
       </nav>
 
       <main className="main-content">
         {tab === 'today' && (
           <TodayView
             date={selectedDate}
-            records={todayRecords}
-            stats={todayStats}
+            babyRecords={{ feeding: todayRecords.feeding, sleep: todayRecords.sleep, diaper: todayRecords.diaper }}
+            momRecords={{ mood: todayRecords.momMood, water: todayRecords.momWater, pump: todayRecords.momPump, supplement: todayMomStats.supplements }}
+            babyStats={todayBabyStats}
+            momStats={todayMomStats}
+            addRecord={addRecord}
+            delRecord={delRecord}
+            updateDate={setSelectedDate}
+          />
+        )}
+        {tab === 'mom' && (
+          <MomView
+            date={selectedDate}
+            momRecords={{ mood: todayRecords.momMood, water: todayRecords.momWater, pump: todayRecords.momPump, supplement: todayMomStats.supplements }}
+            momStats={todayMomStats}
             addRecord={addRecord}
             delRecord={delRecord}
             updateDate={setSelectedDate}
@@ -342,10 +383,11 @@ function SetupWizard({ data, update, onDone }) {
   );
 }
 
-function TodayView({ date, records, stats, addRecord, delRecord, updateDate }) {
+function TodayView({ date, babyRecords, momRecords, babyStats, momStats, addRecord, delRecord, updateDate }) {
   const [showAdd, setShowAdd] = useState(null);
 
-  const sleepHours = stats.sleepTotal > 0 ? (stats.sleepTotal / 3600000).toFixed(1) : '--';
+  const sleepHours = babyStats.sleepTotal > 0 ? (babyStats.sleepTotal / 3600000).toFixed(1) : '--';
+  const waterCups = momStats.waterCount;
 
   const changeDate = (delta) => {
     const d = new Date(date);
@@ -363,12 +405,14 @@ function TodayView({ date, records, stats, addRecord, delRecord, updateDate }) {
         <button className="btn-sm" onClick={() => changeDate(1)} disabled={date >= today()}>▶</button>
       </div>
 
+      {/* Baby stats */}
+      <h3 className="section-label">👶 宝宝</h3>
       <div className="stats-row">
         <Card className="stat-card">
           <div className="stat-icon">🍼</div>
-          <div className="stat-num">{stats.feedCount}</div>
+          <div className="stat-num">{babyStats.feedCount}</div>
           <div className="stat-label">喂奶次数</div>
-          {stats.totalFeed > 0 && <div className="stat-sub">{stats.totalFeed}ml</div>}
+          {babyStats.totalFeed > 0 && <div className="stat-sub">{babyStats.totalFeed}ml</div>}
         </Card>
         <Card className="stat-card">
           <div className="stat-icon">😴</div>
@@ -377,31 +421,74 @@ function TodayView({ date, records, stats, addRecord, delRecord, updateDate }) {
         </Card>
         <Card className="stat-card">
           <div className="stat-icon">🧷</div>
-          <div className="stat-num">{stats.diaperCount}</div>
+          <div className="stat-num">{babyStats.diaperCount}</div>
           <div className="stat-label">换尿布</div>
-          {stats.diaperCount > 0 && <div className="stat-sub">💧{stats.wetCount} 💩{stats.poopCount}</div>}
+          {babyStats.diaperCount > 0 && <div className="stat-sub">💧{babyStats.wetCount} 💩{babyStats.poopCount}</div>}
         </Card>
       </div>
 
+      {/* Mom stats */}
+      <h3 className="section-label">👩 妈妈</h3>
+      <div className="stats-row mom-stats-row">
+        <Card className="stat-card mom-stat">
+          <div className="stat-icon">{momStats.mood || '😌'}</div>
+          <div className="stat-num">{momStats.mood ? MOOD_LABELS[momStats.mood] || '--' : '未记录'}</div>
+          <div className="stat-label">今日心情</div>
+        </Card>
+        <Card className="stat-card mom-stat">
+          <div className="stat-icon">💧</div>
+          <div className="stat-num">{waterCups}</div>
+          <div className="stat-label">喝水(杯)</div>
+          {waterCups > 0 && <div className="stat-sub">{(waterCups * 250) / 1000}L</div>}
+        </Card>
+        <Card className="stat-card mom-stat">
+          <div className="stat-icon">🥛</div>
+          <div className="stat-num">{momStats.pumpCount}</div>
+          <div className="stat-label">泵奶次数</div>
+          {momStats.pumpTotal > 0 && <div className="stat-sub">{momStats.pumpTotal}ml</div>}
+        </Card>
+      </div>
+
+      {/* Baby quick add */}
+      <div className="add-section-label">记录宝宝</div>
       <div className="add-btns">
-        <button className="btn btn-add" onClick={() => setShowAdd(showAdd === 'feeding' ? null : 'feeding')}>+ 记录喂奶</button>
-        <button className="btn btn-add" onClick={() => setShowAdd(showAdd === 'sleep' ? null : 'sleep')}>+ 记录睡眠</button>
-        <button className="btn btn-add" onClick={() => setShowAdd(showAdd === 'diaper' ? null : 'diaper')}>+ 记录尿布</button>
+        <button className="btn btn-add" onClick={() => setShowAdd(showAdd === 'feeding' ? null : 'feeding')}>+ 喂奶</button>
+        <button className="btn btn-add" onClick={() => setShowAdd(showAdd === 'sleep' ? null : 'sleep')}>+ 睡眠</button>
+        <button className="btn btn-add" onClick={() => setShowAdd(showAdd === 'diaper' ? null : 'diaper')}>+ 尿布</button>
+      </div>
+
+      {/* Mom quick add */}
+      <div className="add-section-label">记录妈妈</div>
+      <div className="add-btns">
+        <button className="btn btn-add mom-add" onClick={() => setShowAdd(showAdd === 'mood' ? null : 'mood')}>+ 心情</button>
+        <button className="btn btn-add mom-add" onClick={() => { addRecord('momWater', { amount: 1, time: now(), date, createdAt: now() }); }}>
+          + 💧 喝水
+        </button>
+        <button className="btn btn-add mom-add" onClick={() => setShowAdd(showAdd === 'pump' ? null : 'pump')}>+ 泵奶</button>
       </div>
 
       {showAdd === 'feeding' && <FeedingForm date={date} onAdd={r => { addRecord('feeding', r); setShowAdd(null); }} />}
       {showAdd === 'sleep' && <SleepForm date={date} onAdd={r => { addRecord('sleep', r); setShowAdd(null); }} />}
       {showAdd === 'diaper' && <DiaperForm date={date} onAdd={r => { addRecord('diaper', r); setShowAdd(null); }} />}
+      {showAdd === 'mood' && <MomMoodForm date={date} onAdd={r => { addRecord('momMood', r); setShowAdd(null); }} />}
+      {showAdd === 'pump' && <MomPumpForm date={date} onAdd={r => { addRecord('momPump', r); setShowAdd(null); }} />}
 
       <div className="timeline">
         <h3>今日时间线</h3>
-        {[...records.feeding.map(r => ({ ...r, type: 'feeding' })), ...records.sleep.map(r => ({ ...r, type: 'sleep' })), ...records.diaper.map(r => ({ ...r, type: 'diaper' }))]
+        {[
+          ...babyRecords.feeding.map(r => ({ ...r, recordType: 'feeding' })),
+          ...babyRecords.sleep.map(r => ({ ...r, recordType: 'sleep' })),
+          ...babyRecords.diaper.map(r => ({ ...r, recordType: 'diaper' })),
+          ...momRecords.mood.map(r => ({ ...r, recordType: 'mood' })),
+          ...momRecords.pump.map(r => ({ ...r, recordType: 'pump' })),
+          ...momRecords.water.map(r => ({ ...r, recordType: 'water' })),
+        ]
           .sort((a, b) => new Date(b.startTime || b.time || b.createdAt) - new Date(a.startTime || a.time || a.createdAt))
           .map(record => (
-            <TimelineItem key={record.id} record={record} onDelete={() => delRecord(record.type, record.id)} />
+            <TimelineItem key={record.id} record={record} onDelete={() => delRecord(record.recordType, record.id)} />
           ))}
-        {records.feeding.length === 0 && records.sleep.length === 0 && records.diaper.length === 0 && (
-          <p className="empty-tip">还没有记录，点击上方按钮开始记录</p>
+        {babyRecords.feeding.length === 0 && babyRecords.sleep.length === 0 && babyRecords.diaper.length === 0 && momRecords.water.length === 0 && momRecords.mood.length === 0 && momRecords.pump.length === 0 && (
+          <p className="empty-tip">还没有记录，点击上方按钮开始</p>
         )}
       </div>
     </div>
@@ -409,29 +496,258 @@ function TodayView({ date, records, stats, addRecord, delRecord, updateDate }) {
 }
 
 function TimelineItem({ record, onDelete }) {
-  const icons = { feeding: '🍼', sleep: '😴', diaper: '🧷' };
-  const colors = { feeding: '#ff9800', sleep: '#5c6bc0', diaper: '#26a69a' };
+  const icons = { feeding: '🍼', sleep: '😴', diaper: '🧷', mood: '💬', pump: '🥛', water: '💧' };
+  const colors = { feeding: '#ff9800', sleep: '#5c6bc0', diaper: '#26a69a', mood: '#e91e63', pump: '#7c4dff', water: '#03a9f4' };
   const time = fmtTime(new Date(record.startTime || record.time || record.createdAt));
 
   let detail = '';
-  if (record.type === 'feeding') {
+  if (record.recordType === 'feeding') {
     detail = `${record.feedType === 'bottle' ? '🍶奶瓶' : record.feedType === 'solids' ? '🥣辅食' : '🤱母乳'} ${record.amount ? record.amount + 'ml' : ''} ${record.side || ''} ${record.duration ? record.duration + '分钟' : ''}`;
-  } else if (record.type === 'sleep') {
+  } else if (record.recordType === 'sleep') {
     detail = `${time} - ${record.endTime ? fmtTime(new Date(record.endTime)) : '进行中'} ${record.endTime ? '(' + calcDuration(record.startTime, record.endTime) + ')' : ''}`;
-  } else if (record.type === 'diaper') {
+  } else if (record.recordType === 'diaper') {
     const types = { wet: '💧 小便', poop: '💩 大便', both: '💧💩 都有' };
     detail = `${types[record.diaperType] || record.diaperType} ${record.color || ''}`;
+  } else if (record.recordType === 'mood') {
+    detail = `${record.mood} ${MOOD_LABELS[record.mood] || ''}`;
+  } else if (record.recordType === 'pump') {
+    detail = `🥛 泵奶 ${record.amount ? record.amount + 'ml' : ''} ${record.side || ''} ${record.duration ? record.duration + '分钟' : ''}`;
+  } else if (record.recordType === 'water') {
+    detail = `💧 喝水 ${record.amount || 1}杯`;
   }
 
   return (
-    <div className="timeline-item" style={{ borderLeftColor: colors[record.type] }}>
+    <div className="timeline-item" style={{ borderLeftColor: colors[record.recordType] }}>
       <div className="timeline-time">{time}</div>
-      <div className="timeline-icon">{icons[record.type]}</div>
+      <div className="timeline-icon">{icons[record.recordType]}</div>
       <div className="timeline-detail">
         <div>{detail}</div>
         {record.note && <div className="timeline-note">📝 {record.note}</div>}
       </div>
       <button className="btn-del" onClick={onDelete}>✕</button>
+    </div>
+  );
+}
+
+function MomMoodForm({ date, onAdd }) {
+  const [mood, setMood] = useState('😊');
+  const [note, setNote] = useState('');
+
+  return (
+    <Card className="form-card">
+      <div className="mood-picker">
+        <label>今天心情怎么样？</label>
+        <div className="mood-grid">
+          {MOODS.map(m => (
+            <button key={m} type="button" className={`mood-btn ${mood === m ? 'selected' : ''}`} onClick={() => setMood(m)}>
+              <span className="mood-emoji">{m}</span>
+              <span className="mood-text">{MOOD_LABELS[m]}</span>
+            </button>
+          ))}
+        </div>
+      </div>
+      <div className="form-row">
+        <label>备注</label>
+        <input type="text" value={note} onChange={e => setNote(e.target.value)} placeholder="想说的话..." />
+      </div>
+      <button className="btn btn-primary btn-full" onClick={() => onAdd({ mood, note, time: now(), date, createdAt: now() })}>
+        记录心情
+      </button>
+    </Card>
+  );
+}
+
+function MomPumpForm({ date, onAdd }) {
+  const [amount, setAmount] = useState('');
+  const [duration, setDuration] = useState('');
+  const [side, setSide] = useState('');
+  const [time, setTime] = useState(fmtTime(new Date()));
+
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    onAdd({ amount: Number(amount) || 0, duration: Number(duration) || 0, side, time: `${date}T${time}:00`, date, createdAt: now() });
+  };
+
+  return (
+    <Card className="form-card">
+      <form onSubmit={handleSubmit}>
+        <div className="form-row">
+          <label>时间</label>
+          <input type="time" value={time} onChange={e => setTime(e.target.value)} />
+        </div>
+        <div className="form-row">
+          <label>奶量(ml)</label>
+          <input type="number" value={amount} onChange={e => setAmount(e.target.value)} placeholder="例如: 150" />
+        </div>
+        <div className="form-row">
+          <label>时长(分钟)</label>
+          <input type="number" value={duration} onChange={e => setDuration(e.target.value)} placeholder="例如: 20" />
+        </div>
+        <div className="form-row">
+          <label>左右</label>
+          <select value={side} onChange={e => setSide(e.target.value)}>
+            <option value="">--</option>
+            <option value="左侧">左侧</option>
+            <option value="右侧">右侧</option>
+            <option value="双侧">双侧</option>
+          </select>
+        </div>
+        <button type="submit" className="btn btn-primary btn-full">保存</button>
+      </form>
+    </Card>
+  );
+}
+
+function MomView({ date, momRecords, momStats, addRecord, delRecord, updateDate }) {
+  const [showAdd, setShowAdd] = useState(null);
+  const [supplements, setSupplements] = useState(() => {
+    const todaySupp = momRecords.supplement;
+    if (todaySupp.length > 0) return todaySupp[0];
+    return { calcium: false, iron: false, dha: false, vitamin: false, id: null };
+  });
+
+  const changeDate = (delta) => {
+    const d = new Date(date);
+    d.setDate(d.getDate() + delta);
+    updateDate(fmtDate(d));
+  };
+
+  const getTodaySupp = () => {
+    const recs = momRecords.supplement;
+    return recs.length > 0 ? recs[recs.length - 1] : { calcium: false, iron: false, dha: false, vitamin: false };
+  };
+
+  const todaySupp = getTodaySupp();
+
+  const toggleSupplement = (key) => {
+    const updated = { ...todaySupp, [key]: !todaySupp[key] };
+    if (todaySupp.id) {
+      // update existing record
+      const recs = momRecords.supplement;
+      const idx = recs.findIndex(r => r.id === todaySupp.id);
+      if (idx >= 0) {
+        const newRecs = [...recs];
+        newRecs[idx] = { ...updated, id: todaySupp.id, date, createdAt: recs[idx].createdAt };
+        // We need to update the data directly
+        addRecord('momSupplement', { ...updated, date, createdAt: now() });
+        delRecord('momSupplement', todaySupp.id);
+        return;
+      }
+    }
+    addRecord('momSupplement', { ...updated, date, createdAt: now() });
+  };
+
+  const moodHistory = [...momRecords.mood].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)).slice(0, 7);
+
+  return (
+    <div>
+      <div className="date-nav">
+        <button className="btn-sm" onClick={() => changeDate(-1)}>◀</button>
+        <h2 className={`date-title ${date === today() ? 'date-today' : ''}`}>
+          {date === today() ? '今天' : date === fmtDate(new Date(Date.now() - 86400000)) ? '昨天' : date}
+        </h2>
+        <button className="btn-sm" onClick={() => changeDate(1)} disabled={date >= today()}>▶</button>
+      </div>
+
+      {/* Mood card */}
+      <Card>
+        <h3 className="card-title">😊 今日心情</h3>
+        {momStats.mood ? (
+          <div className="mood-display">
+            <span className="mood-big">{momStats.mood}</span>
+            <span className="mood-label-big">{MOOD_LABELS[momStats.mood]}</span>
+          </div>
+        ) : (
+          <p className="empty-tip">还没记录心情</p>
+        )}
+        <button className="btn btn-primary btn-full" onClick={() => setShowAdd(showAdd === 'mood' ? null : 'mood')}>
+          {momStats.mood ? '更新心情' : '记录心情'}
+        </button>
+        {showAdd === 'mood' && <div className="mt-12"><MomMoodForm date={date} onAdd={r => { addRecord('momMood', r); setShowAdd(null); }} /></div>}
+      </Card>
+
+      {/* Water tracker */}
+      <Card>
+        <h3 className="card-title">💧 喝水打卡</h3>
+        <p className="guide-desc">哺乳期建议每天饮水2000-2500ml（约8-10杯）</p>
+        <div className="water-tracker">
+          {Array.from({ length: 10 }).map((_, i) => (
+            <button
+              key={i}
+              className={`water-cup ${i < momStats.waterCount ? 'filled' : ''}`}
+              onClick={() => addRecord('momWater', { amount: 1, time: now(), date, createdAt: now() })}
+              disabled={i < momStats.waterCount}
+            >
+              💧
+            </button>
+          ))}
+        </div>
+        <p className="water-count">{momStats.waterCount} / 10 杯 (约{momStats.waterCount * 250}ml)</p>
+        {momStats.waterCount >= 8 && <p className="badge-good">🎉 今天达标了！太棒了！</p>}
+      </Card>
+
+      {/* Supplement checklist */}
+      <Card>
+        <h3 className="card-title">💊 产后补充剂</h3>
+        <div className="supplement-list">
+          {[
+            { key: 'calcium', label: '钙片', icon: '🦴' },
+            { key: 'iron', label: '铁剂', icon: '🩸' },
+            { key: 'dha', label: 'DHA', icon: '🧠' },
+            { key: 'vitamin', label: '复合维生素', icon: '💊' },
+          ].map(s => (
+            <button
+              key={s.key}
+              className={`supplement-btn ${todaySupp[s.key] ? 'taken' : ''}`}
+              onClick={() => toggleSupplement(s.key)}
+            >
+              <span className="supp-icon">{s.icon}</span>
+              <span className="supp-label">{s.label}</span>
+              <span className="supp-check">{todaySupp[s.key] ? '✅' : '⬜'}</span>
+            </button>
+          ))}
+        </div>
+      </Card>
+
+      {/* Pump log */}
+      <Card>
+        <div className="section-header">
+          <h3 className="card-title">🥛 泵奶记录</h3>
+          <button className="btn btn-sm btn-primary" onClick={() => setShowAdd(showAdd === 'pump' ? null : 'pump')}>
+            + 记录
+          </button>
+        </div>
+        {showAdd === 'pump' && <div className="mt-12"><MomPumpForm date={date} onAdd={r => { addRecord('momPump', r); setShowAdd(null); }} /></div>}
+        <div className="pump-summary">
+          <span>今日: {momStats.pumpCount}次</span>
+          <span>总计: {momStats.pumpTotal}ml</span>
+        </div>
+        {momRecords.pump.slice().reverse().map(r => (
+          <div key={r.id} className="pump-row">
+            <span>{fmtTime(new Date(r.time))}</span>
+            <span>{r.amount}ml</span>
+            <span>{r.side}</span>
+            <span>{r.duration}分钟</span>
+            <button className="btn-del" onClick={() => delRecord('momPump', r.id)}>✕</button>
+          </div>
+        ))}
+        {momRecords.pump.length === 0 && <p className="empty-tip">暂无泵奶记录</p>}
+      </Card>
+
+      {/* Mood history */}
+      {moodHistory.length > 0 && (
+        <Card>
+          <h3 className="card-title">📊 最近心情</h3>
+          <div className="mood-history">
+            {moodHistory.map(r => (
+              <div key={r.id} className="mood-history-item" title={r.date}>
+                <span className="mood-small">{r.mood}</span>
+                <span className="mood-date-small">{r.date.slice(5)}</span>
+              </div>
+            ))}
+          </div>
+        </Card>
+      )}
     </div>
   );
 }
@@ -614,7 +930,7 @@ function CalendarView({ data, birthDate, selectedDate, onSelectDate }) {
   const [viewMonth, setViewMonth] = useState(() => new Date().getMonth());
   const [viewYear, setViewYear] = useState(() => new Date().getFullYear());
 
-  const allRecords = [...data.feeding, ...data.sleep, ...data.diaper];
+  const allRecords = [...data.feeding, ...data.sleep, ...data.diaper, ...data.momMood, ...data.momWater, ...data.momPump];
   const daysWithData = new Set(allRecords.map(r => r.date));
 
   const firstDay = new Date(viewYear, viewMonth, 1).getDay();
@@ -805,7 +1121,9 @@ function GrowthView({ records, addRecord, delRecord }) {
 
 function GuideView({ monthIdx }) {
   const [selectedMonth, setSelectedMonth] = useState(monthIdx);
+  const [showMom, setShowMom] = useState(false);
   const schedule = MONTH_SCHEDULES[selectedMonth];
+  const momTips = MOM_TIPS[selectedMonth];
 
   return (
     <div>
@@ -822,82 +1140,56 @@ function GuideView({ monthIdx }) {
         ))}
       </div>
 
-      {schedule && (
-        <Card>
-          <h3>{schedule.title}</h3>
-          <p className="guide-desc">{schedule.desc}</p>
-          <div className="schedule-list">
-            {schedule.schedule.map((item, i) => (
-              <div key={i} className="schedule-item">
-                <span className="schedule-time">{item.time}</span>
-                <span className="schedule-icon">{item.icon}</span>
-                <span className="schedule-activity">{item.activity}</span>
-              </div>
-            ))}
+      <div className="guide-toggle">
+        <button className={`btn ${!showMom ? 'btn-primary' : 'btn-outline'}`} onClick={() => setShowMom(false)}>👶 宝宝</button>
+        <button className={`btn ${showMom ? 'btn-primary' : 'btn-outline'}`} onClick={() => setShowMom(true)}>👩 妈妈</button>
+      </div>
+
+      {!showMom && schedule && (
+        <>
+          <Card>
+            <h3>{schedule.title}</h3>
+            <p className="guide-desc">{schedule.desc}</p>
+            <div className="schedule-list">
+              {schedule.schedule.map((item, i) => (
+                <div key={i} className="schedule-item">
+                  <span className="schedule-time">{item.time}</span>
+                  <span className="schedule-icon">{item.icon}</span>
+                  <span className="schedule-activity">{item.activity}</span>
+                </div>
+              ))}
+            </div>
+          </Card>
+          <div className="guide-tips">
+            <h3>💡 本月养育要点</h3>
+            <MilestoneTips month={selectedMonth} />
           </div>
-        </Card>
+        </>
       )}
 
-      <div className="guide-tips">
-        <h3>💡 本月养育要点</h3>
-        <MilestoneTips month={selectedMonth} />
-      </div>
+      {showMom && (
+        <Card>
+          <h3>👩 产后恢复要点 - {MONTH_SCHEDULES[selectedMonth].title}</h3>
+          <ul className="tips-list mom-tips">
+            {momTips.map((tip, i) => (
+              <li key={i}>{tip}</li>
+            ))}
+          </ul>
+        </Card>
+      )}
     </div>
   );
 }
 
 function MilestoneTips({ month }) {
   const tips = {
-    0: [
-      '按需喂养，不要严格卡时间',
-      '注意观察黄疸消退情况',
-      '脐带护理，保持干燥',
-      '每天补充维生素D 400IU',
-      '多趴练习，每次1-2分钟',
-      '黑白卡追视练习',
-    ],
-    1: [
-      '开始建立昼夜节律',
-      '俯卧时间增加到每天15-20分钟',
-      '练习追视和追听',
-      '回应宝宝的发声，多说话',
-      '肠胀气高发期，做排气操',
-      '注意头型，交替睡姿方向',
-    ],
-    2: [
-      '逐渐形成吃-玩-睡规律',
-      '俯卧抬头可达45度',
-      '开始抓握玩具',
-      '多和宝宝说话、唱歌',
-      '户外活动30分钟/天',
-      '注意湿疹和口水疹护理',
-    ],
-    3: [
-      '睡眠倒退期，耐心陪伴',
-      '练习翻身（仰卧→侧卧）',
-      '伸手抓物，提供不同材质玩具',
-      '开始认生，多给予安全感',
-      '流口水增多，准备牙胶',
-      '继续坚持俯卧练习',
-    ],
-    4: [
-      '开始添加辅食（高铁米粉优先）',
-      '每次只添加一种新食物，观察3天',
-      '练习坐立（靠坐→扶坐）',
-      '出牙期，提供磨牙棒',
-      '开始模仿发音（baba/mama）',
-      '注意排查过敏食物',
-    ],
-    5: [
-      '辅食加到2顿，种类多样化',
-      '练习独坐和爬行准备',
-      '可以开始用吸管杯喝水',
-      '亲子阅读绘本时间',
-      '夜间睡眠可持续6-8小时',
-      '注意安全，防止跌落',
-    ],
+    0: ['按需喂养，不要严格卡时间', '注意观察黄疸消退情况', '脐带护理，保持干燥', '每天补充维生素D 400IU', '多趴练习，每次1-2分钟', '黑白卡追视练习'],
+    1: ['开始建立昼夜节律', '俯卧时间增加到每天15-20分钟', '练习追视和追听', '回应宝宝的发声，多说话', '肠胀气高发期，做排气操', '注意头型，交替睡姿方向'],
+    2: ['逐渐形成吃-玩-睡规律', '俯卧抬头可达45度', '开始抓握玩具', '多和宝宝说话、唱歌', '户外活动30分钟/天', '注意湿疹和口水疹护理'],
+    3: ['睡眠倒退期，耐心陪伴', '练习翻身（仰卧→侧卧）', '伸手抓物，提供不同材质玩具', '开始认生，多给予安全感', '流口水增多，准备牙胶', '继续坚持俯卧练习'],
+    4: ['开始添加辅食（高铁米粉优先）', '每次只添加一种新食物，观察3天', '练习坐立（靠坐→扶坐）', '出牙期，提供磨牙棒', '开始模仿发音（baba/mama）', '注意排查过敏食物'],
+    5: ['辅食加到2顿，种类多样化', '练习独坐和爬行准备', '可以开始用吸管杯喝水', '亲子阅读绘本时间', '夜间睡眠可持续6-8小时', '注意安全，防止跌落'],
   };
-
   return (
     <ul className="tips-list">
       {(tips[month] || tips[0]).map((tip, i) => (
