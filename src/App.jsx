@@ -479,9 +479,9 @@ function TodayView({ date, babyRecords, momRecords, babyStats, momStats, addReco
           ...babyRecords.feeding.map(r => ({ ...r, recordType: 'feeding' })),
           ...babyRecords.sleep.map(r => ({ ...r, recordType: 'sleep' })),
           ...babyRecords.diaper.map(r => ({ ...r, recordType: 'diaper' })),
-          ...momRecords.mood.map(r => ({ ...r, recordType: 'mood' })),
-          ...momRecords.pump.map(r => ({ ...r, recordType: 'pump' })),
-          ...momRecords.water.map(r => ({ ...r, recordType: 'water' })),
+          ...momRecords.mood.map(r => ({ ...r, recordType: 'momMood' })),
+          ...momRecords.pump.map(r => ({ ...r, recordType: 'momPump' })),
+          ...momRecords.water.map(r => ({ ...r, recordType: 'momWater' })),
         ]
           .sort((a, b) => new Date(b.startTime || b.time || b.createdAt) - new Date(a.startTime || a.time || a.createdAt))
           .map(record => (
@@ -496,8 +496,8 @@ function TodayView({ date, babyRecords, momRecords, babyStats, momStats, addReco
 }
 
 function TimelineItem({ record, onDelete }) {
-  const icons = { feeding: '🍼', sleep: '😴', diaper: '🧷', mood: '💬', pump: '🥛', water: '💧' };
-  const colors = { feeding: '#ff9800', sleep: '#5c6bc0', diaper: '#26a69a', mood: '#e91e63', pump: '#7c4dff', water: '#03a9f4' };
+  const icons = { feeding: '🍼', sleep: '😴', diaper: '🧷', momMood: '💬', momPump: '🥛', momWater: '💧' };
+  const colors = { feeding: '#ff9800', sleep: '#5c6bc0', diaper: '#26a69a', momMood: '#e91e63', momPump: '#7c4dff', momWater: '#03a9f4' };
   const time = fmtTime(new Date(record.startTime || record.time || record.createdAt));
 
   let detail = '';
@@ -508,11 +508,11 @@ function TimelineItem({ record, onDelete }) {
   } else if (record.recordType === 'diaper') {
     const types = { wet: '💧 小便', poop: '💩 大便', both: '💧💩 都有' };
     detail = `${types[record.diaperType] || record.diaperType} ${record.color || ''}`;
-  } else if (record.recordType === 'mood') {
+  } else if (record.recordType === 'momMood') {
     detail = `${record.mood} ${MOOD_LABELS[record.mood] || ''}`;
-  } else if (record.recordType === 'pump') {
+  } else if (record.recordType === 'momPump') {
     detail = `🥛 泵奶 ${record.amount ? record.amount + 'ml' : ''} ${record.side || ''} ${record.duration ? record.duration + '分钟' : ''}`;
-  } else if (record.recordType === 'water') {
+  } else if (record.recordType === 'momWater') {
     detail = `💧 喝水 ${record.amount || 1}杯`;
   }
 
